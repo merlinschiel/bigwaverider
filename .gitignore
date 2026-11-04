@@ -1,0 +1,26 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Local high score
+highscore.json
+
+# Windows download markers (WSL)
+*:Zone.Identifier
+
+#literature
+literature/
+
+# Old pygame version, not part of the web game
+main.py
+nazare/
+pyproject.toml
+uv.lock
+.python-version

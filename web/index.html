@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Nazar&eacute; Canyon Surf</title>
+  <meta name="description" content="A small surf game about why the Nazare canyon makes the biggest surfed waves on Earth.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Unbounded:wght@600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=dev">
+  <!-- "?v=dev" is replaced by the commit id on deploy, so browsers never mix old and new files -->
+  <script type="importmap">
+    { "imports": {
+        "./js/physics.js": "./js/physics.js?v=dev",
+        "./js/map.js": "./js/map.js?v=dev",
+        "./js/surf.js": "./js/surf.js?v=dev",
+        "./js/leaderboard.js": "./js/leaderboard.js?v=dev" } }
+  </script>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23071a2c'/%3E%3Cpath d='M4 22c5 0 6-12 14-12 5 0 8 4 8 8-3-3-7-2-8 2-1 3 3 4 5 2' fill='none' stroke='%234fe3d0' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+</head>
+<body>
+  <script>
+    // If the game fails to start (a file did not load, or old cached files), say so on the
+    // start screen instead of leaving a page that silently does nothing.
+    window.nazareFail = function (e) {
+      if (window.nazareStarted) return;
+      var t = e && e.target;
+      if (t && t.tagName && t.tagName !== "SCRIPT") return;     // a font or image is not fatal
+      var el = document.getElementById("load-error");
+      if (el) el.hidden = false;
+    };
+    window.addEventListener("error", window.nazareFail, true);
+    window.addEventListener("unhandledrejection", window.nazareFail);
+  </script>
+  <canvas id="sea"></canvas>
+
+  <!-- Home -->
+  <section id="home" class="screen active">
+    <div class="home-card">
+      <p class="eyebrow">Praia do Norte, Portugal</p>
+      <h1>NAZAR&Eacute;</h1>
+      <p class="tagline">Ride the biggest waves on Earth</p>
+      <button class="btn primary big" data-go="swell">Play</button>
+      <p class="hint"><kbd>Enter</kbd> to start</p>
+      <p class="load-error" id="load-error" hidden>The game could not start. Reload the page with
+        <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>R</kbd>.</p>
+    </div>
+  </section>
+
+  <!-- Swell picker -->
+  <section id="swell" class="screen">
+    <div class="map-wrap">
+      <canvas id="map"></canvas>
+      <div class="legend glass">
+        <div class="legend-row"><span class="swatch depth"></span><span>Shallow to deep water</span></div>
+        <div class="legend-row"><span class="swatch steep"></span><span>Steep drop-off</span></div>
+        <div class="legend-row"><span class="swatch arrow"></span><span class="pick-only">Swell direction: drag the arrow</span><span class="after">Swell direction</span></div>
+        <div class="legend-row"><span class="swatch crest"></span><span>Wave crests</span></div>
+        <div class="legend-row after"><span class="swatch height"></span><span>Wave size on the beach</span></div>
+      </div>
+      <button class="btn ghost back" data-go="home" aria-label="Back">
+        <svg viewBox="0 0 24 24" width="18" height="18"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+    <aside class="panel glass">
+      <div class="pick" id="pick">
+        <h2>Pick a swell</h2>
+        <p class="hint-line">Turn the swell on the map or use the sliders. You see your wave size once you lock in.</p>
+        <div class="chips" id="presets"></div>
+        <label class="slider"><span>Wave period<b id="v-period"></b></span>
+          <input type="range" id="period" min="6" max="22" step="1"></label>
+        <label class="slider"><span>Coming from<b id="v-dir"></b></span>
+          <input type="range" id="dir" min="240" max="340" step="5"></label>
+        <label class="slider"><span>Size out at sea<b id="v-size"></b></span>
+          <input type="range" id="size" min="1" max="9" step="0.5"></label>
+        <button class="btn primary wide" id="lock-in">Lock in swell</button>
+      </div>
+
+      <div class="reveal" id="reveal" hidden>
+        <div>
+          <p class="eyebrow">Your swell</p>
+          <p class="picked" id="picked"></p>
+      </div>
+        <div class="result">
+          <p class="label">Biggest wave you will surf</p>
+          <p class="big-number"><span id="r-height">--</span><small>m</small></p>
+          <div class="bars">
+            <div class="bar-row"><span>With the canyon</span><div class="bar"><i id="b-canyon"></i></div><b id="r-canyon"></b></div>
+            <div class="bar-row muted"><span>Canyon filled in</span><div class="bar"><i id="b-plain"></i></div><b id="r-plain"></b></div>
+          </div>
+          <p class="explain" id="r-explain"></p>
+      </div>
+        <button class="btn primary wide" id="surf-it">Surf it</button>
+      </div>
+    </aside>
+  </section>
+
+  <!-- Surfing HUD -->
+  <section id="surf" class="screen passthrough">
+    <div class="hud">
+      <div class="pill glass"><b id="h-wave">Wave 1/3</b><span id="h-info"></span></div>
+      <div class="progress glass"><i id="h-progress"></i></div>
+      <div class="pill glass score"><span>Score</span><b id="h-score">0</b></div>
+    </div>
+    <div class="touch" id="touch">
+      <div class="pad left">
+        <button data-key="up" aria-label="Climb"><svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button>
+        <button data-key="down" aria-label="Drop"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+      </div>
+      <div class="pad right">
+        <button data-key="left" aria-label="Slow down"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
+        <button data-key="right" aria-label="Speed up"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
+      </div>
+    </div>
+    <p class="rotate-hint glass">Turn your phone sideways for a bigger wave</p>
+    <button class="btn ghost pause-btn" id="pause-btn" aria-label="Pause">
+      <svg viewBox="0 0 24 24" width="18" height="18"><path d="M8 5v14M16 5v14" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>
+    </button>
+  </section>
+
+  <!-- Projector leaderboard (open the game link with ?board) -->
+  <section id="board" class="screen">
+    <div class="board-main">
+      <p class="eyebrow">Class leaderboard</p>
+      <h2 class="board-title">NAZAR&Eacute;</h2>
+      <p class="board-meta" id="bd-meta">Loading scores...</p>
+      <ol class="board-list" id="bd-list"></ol>
+    </div>
+    <aside class="board-join glass">
+      <div class="qr" id="bd-qr"></div>
+      <p>Scan to play</p>
+      <b id="bd-url"></b>
+    </aside>
+  </section>
+
+  <!-- Overlays -->
+  <div id="tutorial" class="overlay">
+    <div class="card glass">
+      <h3>How to surf</h3>
+      <div class="howto">
+        <div class="how"><div class="keys"><kbd>&uarr;</kbd><kbd>&darr;</kbd></div><p>Steer up and down the wave</p></div>
+        <div class="how"><div class="keys"><kbd>&rarr;</kbd></div><p>Pump for speed</p></div>
+        <div class="how"><div class="keys"><kbd>&larr;</kbd></div><p>Slow down</p></div>
+      </div>
+      <div class="tip">
+        <p>The white water chases you. Stay ahead of it, slip into the barrel, or fly off the top.</p></div>
+      <button class="btn primary wide" id="tutorial-go">Let's go</button>
+    </div>
+  </div>
+
+  <div id="wave-end" class="overlay">
+    <div class="card glass center">
+      <p class="eyebrow" id="we-kicker"></p>
+      <h3 id="we-title"></h3>
+      <p class="big-number"><span id="we-points">0</span></p>
+      <ul class="tricks" id="we-tricks"></ul>
+      <p class="fact" id="we-fact"></p>
+      <button class="btn primary wide" id="we-next">Next wave</button>
+    </div>
+  </div>
+
+  <div id="final" class="overlay">
+    <div class="card glass center">
+      <p class="eyebrow">Session over</p>
+      <p class="big-number"><span id="f-total">0</span></p>
+      <p class="record" id="f-record"></p>
+      <div class="waves" id="f-waves"></div>
+      <p class="fact" id="f-fact"></p>
+      <div class="lb" id="f-lb" hidden>
+        <form class="lb-form" id="lb-form">
+          <input id="lb-name" type="text" maxlength="16" placeholder="Your name" autocomplete="nickname"
+                 enterkeyhint="send" aria-label="Your name for the class leaderboard">
+          <button class="btn primary" id="lb-send" type="submit">Post score</button>
+        </form>
+        <p class="lb-status" id="lb-status"></p>
+        <ol class="lb-list" id="lb-list"></ol>
+      </div>
+      <div class="row">
+        <button class="btn primary" id="f-again">Surf again</button>
+        <button class="btn ghost" id="f-swell">New swell</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="pause" class="overlay">
+    <div class="card glass center small">
+      <h3>Paused</h3>
+      <div class="col">
+        <button class="btn primary wide" id="p-resume">Keep surfing</button>
+        <button class="btn ghost wide" id="p-help">How to surf</button>
+        <button class="btn ghost wide" id="p-quit">Back to swell</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js?v=dev"></script>
+</body>
+</html>
