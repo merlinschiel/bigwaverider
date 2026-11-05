@@ -66,13 +66,12 @@
     <aside class="panel glass">
       <div class="pick" id="pick">
         <h2>Pick a swell</h2>
-        <p class="hint-line">Turn the swell on the map or use the sliders. You see your wave size once you lock in.</p>
-        <div class="chips" id="presets"></div>
+        <p class="hint-line">Find the swell that makes the biggest wave. Turn the arrow on the map or use the sliders, then lock in to see your wave.</p>
         <label class="slider"><span>Wave period<b id="v-period"></b></span>
           <input type="range" id="period" min="6" max="22" step="1"></label>
         <label class="slider"><span>Coming from<b id="v-dir"></b></span>
           <input type="range" id="dir" min="240" max="340" step="5"></label>
-        <label class="slider"><span>Size out at sea<b id="v-size"></b></span>
+        <label class="slider"><span>Wave height in deep water<b id="v-size"></b></span>
           <input type="range" id="size" min="1" max="9" step="0.5"></label>
         <button class="btn primary wide" id="lock-in">Lock in swell</button>
       </div>

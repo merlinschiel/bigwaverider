@@ -8,11 +8,11 @@ const $ = (id) => document.getElementById(id);
 // the real depth grid drives both the map and the wave physics
 await loadBathymetry();
 
-const PRESETS = [
-  { name: "Long swell", period: 18, dir: 300, size: 7 },
-  { name: "Wind swell", period: 8, dir: 300, size: 4 },
-  { name: "From the SW", period: 16, dir: 250, size: 6 },
-];
+// The picker starts with all sliders in the middle: finding the swell that makes the
+// biggest wave is the player's job
+const START_SWELL = { period: 14, dir: 290, size: 5 };
+// swell behind the wave on the home screen (not shown to the player as a choice)
+const DEMO_SWELL = { period: 18, dir: 300, size: 7 };
 // Offshore height of each wave in a session as a multiple of Hs; the last is the set wave
 const SET_SEQUENCE = [1.0, 1.4, 1.8];
 const WAVE_NAMES = ["Wave 1 of 3", "Wave 2 of 3", "Set wave"];
@@ -28,7 +28,7 @@ const store = {
 const state = {
   screen: "home",
   overlay: null,
-  swell: { ...PRESETS[0] },
+  swell: { ...START_SWELL },
   fc: null,          // forecast of the locked-in swell, null while picking
   locked: false,
   demoFc: null,      // forecast for the home screen wave
@@ -93,16 +93,6 @@ map.swell = state.swell;
 map.onDirection = (dir) => { state.swell.dir = dir; syncSliders(); };
 const sliders = { period: $("period"), dir: $("dir"), size: $("size") };
 
-const presetBox = $("presets");
-PRESETS.forEach((p, i) => {
-  const b = document.createElement("button");
-  b.className = "chip";
-  b.textContent = p.name;
-  b.addEventListener("click", () => { Object.assign(state.swell, p); syncSliders(); });
-  presetBox.appendChild(b);
-  p.el = b;
-});
-
 function syncSliders() {
   const s = state.swell;
   sliders.period.value = s.period;
@@ -119,9 +109,6 @@ function updateLabels() {
   for (const el of Object.values(sliders)) {
     const t = (el.value - el.min) / (el.max - el.min);
     el.style.setProperty("--fill", `${t * 100}%`);
-  }
-  for (const p of PRESETS) {
-    p.el.classList.toggle("on", p.period === s.period && p.dir === s.dir && p.size === s.size);
   }
 }
 
@@ -174,7 +161,7 @@ function fillReveal(animate) {
   const s = state.swell, fc = state.fc;
   const big = fc.setWave(), plain = fc.setWave(false);
   const top = Math.max(25, big.height, plain.height);
-  $("picked").textContent = `${s.period} s waves from the ${compass(s.dir)}, ${s.size} m out at sea`;
+  $("picked").textContent = `${s.period} s waves from the ${compass(s.dir)}, ${s.size} m high in deep water`;
   $("r-canyon").textContent = `${big.height.toFixed(0)} m`;
   $("r-plain").textContent = `${plain.height.toFixed(0)} m`;
   const bars = () => {
@@ -556,7 +543,7 @@ syncSliders();
 if (boardMode) startBoard();
 // compute the default forecast once the first frames are on screen
 setTimeout(() => {
-  const p = PRESETS[0];
+  const p = DEMO_SWELL;
   state.demoFc = forecast(p.period, p.dir, p.size);
   if (state.screen === "home" && !state.fc) state.game = new SurfGame(state.demoFc.setWave(), { demo: true });
 }, 300);
