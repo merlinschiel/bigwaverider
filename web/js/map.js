@@ -1,31 +1,27 @@
-// The swell map: real bathymetry (EMODnet) with the landmarks and the steep drop-offs,
-// a compass arc around Nazare with a draggable swell arrow, and (once the swell is
-// locked in) the animated wave crests bending over the canyon and the breaking wave
-// height along the shore.
+// Swell map: depths, landmarks, the swell arrow and, once locked in, the wave crests.
 
-import { BIN, BINS_Y, canyonExcess, compass, depth, shorelineX, travelAngle } from "./physics.js";
+import { PEAK, canyonExcess, compass, depth, shorelineX, travelAngle } from "./physics.js";
+import { CrestField } from "./crests.js";
 
-const CENTER = [-2000, 300];          // metres, middle of the interesting area
-const SPAN = [9000, 8600];            // area that must always be visible
+const CENTER = [-2000, 300];
+const SPAN = [9000, 8600];            // always visible (m)
 const CREST_SPEEDUP = 20;
 const DEPTH_TICKS = [5, 20, 50, 100, 200, 500];
 
-// landmarks (map metres, x east, y north)
 const LIGHTHOUSE = [-390, -950];
 const PRAIA_NORTE_Y = 1000;
 const PRAIA_NAZARE_Y = -2050;
 const CANYON_LABEL = [-3300, -2080];
-const CANYON_ANGLE = 0.06;            // the upper canyon runs roughly east-west here
-const STEEP = [0.07, 0.3];            // bottom slope (rise over run) shaded as steep
+const CANYON_ANGLE = 0.06;
+const STEEP = [0.07, 0.3];            // bottom slope shaded as steep
 
-// compass arc around the lighthouse that the swell arrow slides along
 const RING_R = 4200;
 const DIR_MIN = 240, DIR_MAX = 340, DIR_STEP = 5;
 const TICKS = [[247.5, "WSW"], [270, "W"], [292.5, "WNW"], [315, "NW"], [337.5, "NNW"]];
 
 const WATER = [[0, [143, 240, 220]], [0.3, [47, 184, 196]], [0.62, [19, 96, 143]], [1, [7, 26, 56]]];
-const HEIGHT = [[0, [255, 243, 176]], [0.35, [255, 179, 71]], [0.7, [255, 94, 120]], [1, [181, 23, 158]]];
-const HEIGHT_MAX = 16;
+const TURNED = [158, 235, 255];
+const CREST_PX = 4;
 
 function ramp(stops, t) {
   t = Math.min(Math.max(t, 0), 1);
@@ -51,8 +47,8 @@ export class SwellMap {
     this.ctx = canvas.getContext("2d");
     this.forecast = null;
     this.swell = { period: 18, dir: 300, size: 7 };
-    this.interactive = true;     // the swell arrow can be dragged
-    this.onDirection = null;     // called with the new direction while dragging
+    this.interactive = true;
+    this.onDirection = null;
     this.anim = 0;
     this.time = 0;
     this.bathy = null;
@@ -61,6 +57,7 @@ export class SwellMap {
     this.hover = false;
     this.layer = document.createElement("canvas");
     this.mask = document.createElement("canvas");
+    this.crests = null;
     this.bindPointer();
   }
 
@@ -73,9 +70,10 @@ export class SwellMap {
     this.dpr = dpr;
     this.canvas.width = this.layer.width = this.mask.width = w * dpr;
     this.canvas.height = this.layer.height = this.mask.height = h * dpr;
-    this.scale = Math.min(w / SPAN[0], h / SPAN[1]);     // px per metre
+    this.scale = Math.min(w / SPAN[0], h / SPAN[1]);
     this.renderBathymetry();
     this.renderMask();
+    if (this.crests) this.crests.view = null;
   }
 
   toScreen(x, y) {
@@ -90,7 +88,7 @@ export class SwellMap {
 
   renderBathymetry() {
     const [w, h] = this.size;
-    const res = 1.25;                       // render a bit above CSS resolution
+    const res = 1.25;
     const W = Math.round(w * res), H = Math.round(h * res);
     const metresPerPx = 1 / (this.scale * res);
     const off = document.createElement("canvas");
@@ -103,7 +101,6 @@ export class SwellMap {
     for (let j = 0; j < H; j++) {
       for (let i = 0; i < W; i++) {
         const [x, y] = this.toWorld((i + 0.5) / res, (j + 0.5) / res);
-        // inland ponds and river mouths are drawn as land
         const v = x > shorelineX(y) + 250 ? Math.min(depth(x, y), -1) : depth(x, y);
         d[j * W + i] = v;
         beachX[j * W + i] = x - shorelineX(y);
@@ -117,14 +114,12 @@ export class SwellMap {
         const vr = d[p + (i < W - 1 ? 1 : 0)], vd = d[p + (j < H - 1 ? W : 0)];
         let c;
         if (v <= 0) {
-          // land: slate that lightens with height, lit from the north-west, sand at the beach
           const e = -v;
           const relief = Math.max(-0.35, Math.min(0.35, ((vr - v) - (vd - v)) / metresPerPx * 4));
           c = mix([28, 37, 50], [62, 72, 84], Math.min(e / 120, 1)).map((q) => q * (1 + relief));
           if (e < 4 && beachX[p] < 160) c = [232, 212, 160];
         } else {
           c = ramp(WATER, depthT(v));
-          // soft hillshade from the depth gradient makes the canyon walls readable
           const shade = Math.max(-0.25, Math.min(0.25, (Math.log10(Math.max(vr, 1)) - Math.log10(Math.max(v, 1))) * 6
                                                       - (Math.log10(Math.max(vd, 1)) - Math.log10(Math.max(v, 1))) * 6));
           c = c.map((q) => q * (1 + shade));
@@ -132,7 +127,6 @@ export class SwellMap {
           if (vr > 0 && vd > 0 && (level(vr) !== level(v) || level(vd) !== level(v))) {
             c = c.map((q) => q * 0.8 + 255 * 0.2 * 0.6);
           }
-          // steep drop-offs: where the bottom falls away fast, tinted lime
           const slope = Math.hypot(vr - v, vd - v) / metresPerPx;
           const t = smooth(STEEP[0], STEEP[1], slope);
           if (t > 0) c = mix(c, [196, 255, 120], 0.55 * t);
@@ -145,9 +139,12 @@ export class SwellMap {
     this.bathy = off;
   }
 
-  // where the incoming (straight) swell lines are drawn: open water, fading out well
-  // before the coast so they say nothing about what happens near the beach
   renderMask() {
+    this.buildMask((x, y) => smooth(1300, 2900, shorelineX(y) - x), this.mask);
+  }
+
+  // alpha(x, y) mask at quarter resolution
+  buildMask(alpha, out = document.createElement("canvas")) {
     const [w, h] = this.size;
     const W = Math.ceil(w / 4), H = Math.ceil(h / 4);
     const small = document.createElement("canvas");
@@ -157,18 +154,22 @@ export class SwellMap {
     for (let j = 0; j < H; j++) {
       for (let i = 0; i < W; i++) {
         const [x, y] = this.toWorld((i + 0.5) * 4, (j + 0.5) * 4);
-        const a = smooth(1300, 2900, shorelineX(y) - x);
-        img.data[(j * W + i) * 4 + 3] = a * 255;
+        img.data[(j * W + i) * 4 + 3] = alpha(x, y) * 255;
       }
     }
     sctx.putImageData(img, 0, 0);
-    const mctx = this.mask.getContext("2d");
-    mctx.clearRect(0, 0, this.mask.width, this.mask.height);
+    out.width = w * this.dpr;
+    out.height = h * this.dpr;
+    const mctx = out.getContext("2d");
     mctx.imageSmoothingQuality = "high";
-    mctx.drawImage(small, 0, 0, this.mask.width, this.mask.height);
+    mctx.drawImage(small, 0, 0, out.width, out.height);
+    return out;
   }
 
-  setForecast(fc) { this.forecast = fc; }
+  setForecast(fc) {
+    if (fc !== this.forecast) this.crests = fc ? new CrestField(fc) : null;
+    this.forecast = fc;
+  }
 
   draw(dt) {
     this.resize();
@@ -180,8 +181,7 @@ export class SwellMap {
     ctx.imageSmoothingQuality = "high";
     ctx.drawImage(this.bathy, 0, 0, w, h);
     if (this.forecast) {
-      this.drawCrests();
-      this.drawShore();
+      this.drawSchematic();
     } else {
       this.drawIncoming();
     }
@@ -189,8 +189,6 @@ export class SwellMap {
     this.drawRing();
     if (this.forecast) this.drawPeak();
   }
-
-  // ------------------------------------------------------ before lock-in
 
   drawIncoming() {
     const { period, dir, size } = this.swell;
@@ -202,8 +200,8 @@ export class SwellMap {
     lctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
 
     const th = travelAngle(dir);
-    const ux = Math.cos(th), uy = -Math.sin(th);          // travel direction on screen
-    const spacing = 16 + (period - 6) * 3;                // longer period, longer waves
+    const ux = Math.cos(th), uy = -Math.sin(th);
+    const spacing = 16 + (period - 6) * 3;
     const diag = Math.hypot(w, h);
     const phase = (this.time * spacing * 0.6) % spacing;
     const path = new Path2D();
@@ -226,79 +224,65 @@ export class SwellMap {
     this.ctx.drawImage(this.layer, 0, 0, w, h);
   }
 
-  // ------------------------------------------------------- after lock-in
-
-  drawCrests() {
-    const fc = this.forecast, ctx = this.ctx, T = fc.period;
-    let tMax = 0;
-    for (const r of fc.rays) tMax = Math.max(tMax, r[r.length - 1][2]);
-    const n = Math.floor(tMax / T) + 1;
-    const phase = this.anim % T;
-    // position of each crest (tau) along each ray
-    const pos = fc.rays.map((r) => {
-      const out = new Array(n);
-      let j = 0;
-      for (let k = 0; k < n; k++) {
-        const tau = phase + k * T;
-        if (tau > r[r.length - 1][2]) { out[k] = null; continue; }
-        while (j < r.length - 2 && r[j + 1][2] < tau) j++;
-        const a = r[j], b = r[j + 1];
-        const f = (tau - a[2]) / Math.max(b[2] - a[2], 1e-6);
-        out[k] = [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
-      }
-      return out;
-    });
-    const segs = [];
-    for (let i = 0; i < pos.length - 1; i++) {
-      for (let k = 0; k < n; k++) {
-        const a = pos[i][k], b = pos[i + 1][k];
-        if (a && b && Math.hypot(a[0] - b[0], a[1] - b[1]) < 900) segs.push([a, b]);
-      }
+  drawSchematic() {
+    const fc = this.forecast, cf = this.crests, ctx = this.ctx;
+    if (!cf.view) {
+      const [w, h] = this.size;
+      const [xa, yb] = this.toWorld(-20, -20), [xb, ya] = this.toWorld(w + 20, h + 20);
+      cf.setView(xa, xb, ya, yb, Math.max(30, CREST_PX / this.scale));
     }
-    const path = new Path2D();
-    for (const [a, b] of segs) {
-      const p = this.toScreen(a[0], a[1]), q = this.toScreen(b[0], b[1]);
-      path.moveTo(p[0], p[1]);
-      path.lineTo(q[0], q[1]);
-    }
-    ctx.lineCap = "round";
-    ctx.strokeStyle = "rgba(255,255,255,0.18)";
-    ctx.lineWidth = 6;
-    ctx.stroke(path);
-    ctx.strokeStyle = "rgba(255,255,255,0.92)";
-    ctx.lineWidth = 1.6;
-    ctx.stroke(path);
-  }
-
-  drawShore() {
-    const fc = this.forecast, ctx = this.ctx;
-    // a smooth band just inland of the shoreline, one segment per 100 m of coast
-    ctx.lineCap = "round";
-    ctx.lineWidth = Math.max(6, 200 * this.scale);
-    const along = (y) => this.toScreen(shorelineX(y) + 140, y);
-    BINS_Y.forEach((yb, b) => {
-      const p = along(yb + BIN / 2), q = along(yb - BIN / 2);
-      ctx.strokeStyle = rgb(ramp(HEIGHT, fc.hbProfile[b] / HEIGHT_MAX));
-      ctx.beginPath();
-      ctx.moveTo(p[0], p[1]);
-      ctx.lineTo(q[0], q[1]);
-      ctx.stroke();
+    const phase = this.anim % fc.period;
+    const s = this.scale, [w, h] = this.size;
+    const sx = (x) => w / 2 + (x - CENTER[0]) * s, sy = (y) => h / 2 - (y - CENTER[1]) * s;
+    const groups = new Map();
+    cf.contours("T", phase, (x0, y0, x1, y1, e) => {
+      const key = Math.round(Math.min(Math.max(e, 0), 2.6) * 10);
+      let path = groups.get(key);
+      if (!path) groups.set(key, path = new Path2D());
+      path.moveTo(sx(x0), sy(y0));
+      path.lineTo(sx(x1), sy(y1));
     });
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (const [key, path] of groups) {
+      const e = key / 10;
+      const alpha = Math.min(Math.max(0.6 * e ** 1.5, 0.08), 1);
+      const width = Math.min(Math.max(1.2 + 0.5 * e, 1.2), 2.6);
+      ctx.strokeStyle = `rgba(255,255,255,${0.25 * alpha})`;
+      ctx.lineWidth = width * 3.2;
+      ctx.stroke(path);
+      ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
+      ctx.lineWidth = width;
+      ctx.stroke(path);
+    }
+    if (cf.mirror && fc.reflected > 0.03) {
+      const path = new Path2D();
+      cf.contours("R", phase, (x0, y0, x1, y1) => {
+        path.moveTo(sx(x0), sy(y0));
+        path.lineTo(sx(x1), sy(y1));
+      });
+      const a = Math.min(1, 0.25 + fc.reflected);
+      ctx.strokeStyle = rgb(TURNED, 0.25 * a);
+      ctx.lineWidth = 5.5;
+      ctx.stroke(path);
+      ctx.strokeStyle = rgb(TURNED, 0.95 * a);
+      ctx.lineWidth = 1.8;
+      ctx.stroke(path);
+    }
   }
 
   drawPeak() {
     const fc = this.forecast, ctx = this.ctx;
-    const [px, py] = this.toScreen(shorelineX(fc.peakY) + 140, fc.peakY);
+    const peak = (fc.reflected >= 0.3 && this.crests?.peak) || PEAK;
+    const [px, py] = this.toScreen(peak[0], peak[1]);
     const pulse = (this.anim / CREST_SPEEDUP) % 1.6 / 1.6;
     ctx.strokeStyle = `rgba(255,255,255,${0.8 * (1 - pulse)})`;
     ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(px, py, 10 + 22 * pulse, 0, Math.PI * 2); ctx.stroke();
     ctx.fillStyle = "#fff";
     ctx.beginPath(); ctx.arc(px, py, 6, 0, Math.PI * 2); ctx.fill();
-    this.pill(`Peak ${fc.setWave().height.toFixed(0)} m`, px + 18, py, "#10131a", "#fff");
+    this.sidePill(`Peak ${fc.setWave().height.toFixed(0)} m`, px, py, 18, "left");
   }
-
-  // ----------------------------------------------------------- landmarks
 
   get small() { return this.size[0] < 560; }
 
@@ -315,19 +299,17 @@ export class SwellMap {
     this.beach("Praia da Nazaré", [shorelineX(PRAIA_NAZARE_Y), PRAIA_NAZARE_Y], "right");
     this.lighthouse();
 
-    // scale bar, top right over land
     const [bx, by] = this.toScreen(1000, 3900);
     ctx.strokeStyle = "rgba(230,240,248,0.7)"; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + 1000 * this.scale, by); ctx.stroke();
     this.label("1 km", 1500, 4050, { align: "center", font: "600 11px Inter, sans-serif" });
 
-    // data credit, bottom right (above the legend strip on phones)
     const [w, h] = this.size;
     ctx.font = "500 10px Inter, sans-serif";
     ctx.textAlign = "right";
     ctx.textBaseline = "alphabetic";
     ctx.fillStyle = "rgba(230,240,248,0.55)";
-    ctx.fillText(sm ? "Depths: EMODnet" : "Depths: EMODnet Bathymetry (CC BY 4.0)", w - 8, sm ? h - 80 : h - 8);
+    ctx.fillText(sm ? "Depths: EMODnet" : "Depths: EMODnet Bathymetry (CC BY 4.0)", w - 8, h - 8);
   }
 
   beach(name, at, side) {
@@ -340,7 +322,6 @@ export class SwellMap {
     this.sidePill(name, x, y, 12, side);
   }
 
-  // a label pill beside a point, flipped to the other side if it would leave the map
   sidePill(text, x, y, gap, side) {
     const w = this.pillWidth(text);
     if (side === "right" && x + gap + w > this.size[0] - 4) side = "left";
@@ -351,7 +332,6 @@ export class SwellMap {
   lighthouse() {
     const ctx = this.ctx;
     const [x, y] = this.toScreen(LIGHTHOUSE[0], LIGHTHOUSE[1]);
-    // sweeping light beam
     const a = this.time * 0.9;
     const len = Math.min(110, 1800 * this.scale);
     const g = ctx.createRadialGradient(x, y - 14, 0, x, y - 14, len);
@@ -363,7 +343,6 @@ export class SwellMap {
     ctx.arc(x, y - 14, len, a - 0.22, a + 0.22);
     ctx.closePath();
     ctx.fill();
-    // tower: white with a red band and a glowing lantern
     ctx.save();
     ctx.shadowColor = "rgba(0,0,0,0.5)";
     ctx.shadowBlur = 6;
@@ -378,8 +357,6 @@ export class SwellMap {
     ctx.beginPath(); ctx.arc(x, y - 15, 3.4, 0, Math.PI * 2); ctx.fill();
     this.sidePill("Nazaré Lighthouse", x, y - 4, 14, "right");
   }
-
-  // ------------------------------------------------------- swell compass
 
   ringPoint(bearing, extra = 0) {
     const b = bearing * Math.PI / 180;
@@ -408,7 +385,7 @@ export class SwellMap {
     arc(DIR_MIN - 8, DIR_MAX + 8); ctx.stroke();
     ctx.setLineDash([]);
     for (const [b, name] of TICKS) {
-      if (Math.abs(b - this.swell.dir) < 11) continue;     // keep clear of the arrow's own label
+      if (Math.abs(b - this.swell.dir) < 11) continue;
       const [x0, y0] = this.ringPoint(b, -5), [x1, y1] = this.ringPoint(b, 5);
       ctx.strokeStyle = "rgba(255,255,255,0.6)";
       ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
@@ -420,7 +397,6 @@ export class SwellMap {
       ctx.fillText(name, lx, ly);
     }
 
-    // the swell arrow: a knob on the arc pointing in towards Nazare
     const dir = this.swell.dir;
     const [kx, ky] = this.ringPoint(dir);
     const ang = Math.atan2(cy - ky, cx - kx);
@@ -457,7 +433,6 @@ export class SwellMap {
     this.pill(text, Math.max(8, px - tw / 2), py, "#10131a", "#ff7a59");
   }
 
-  // dragging the arrow along the arc sets the swell direction
   bindPointer() {
     const c = this.canvas;
     const local = (e) => { const r = c.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
@@ -496,8 +471,6 @@ export class SwellMap {
     c.addEventListener("pointerup", end);
     c.addEventListener("pointercancel", end);
   }
-
-  // --------------------------------------------------------------- text
 
   get pillFont() { return this.small ? "700 11px Inter, sans-serif" : "700 13px Inter, sans-serif"; }
 

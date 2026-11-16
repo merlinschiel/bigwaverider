@@ -1,7 +1,4 @@
-// Class leaderboard backed by a Google Sheet (see leaderboard/README.md).
-//
-// Paste the web app URL from the Apps Script deployment here. While it is empty the
-// game runs exactly as before, without any leaderboard.
+// Leaderboard on a Google Sheet (leaderboard/README.md). Empty URL = no leaderboard.
 export const LEADERBOARD_URL = "https://script.google.com/macros/s/AKfycbx0gTcYFvw6yHwizNeQWfmcQ-72m9g_CchS9jtIuVVK7P3CKwjKZNedoEXdvFG1W3AtEw/exec";
 
 export const enabled = () => LEADERBOARD_URL !== "";
@@ -14,8 +11,7 @@ async function call(params, body, tries = 3) {
   let lastError;
   for (let i = 0; i < tries; i++) {
     try {
-      // text/plain keeps this a "simple" request, so the browser skips the CORS preflight
-      // that Apps Script cannot answer
+      // text/plain avoids a CORS preflight, which Apps Script cannot answer
       const res = await fetch(url, body
         ? { method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "text/plain;charset=utf-8" } }
         : { method: "GET", cache: "no-store" });
@@ -26,7 +22,6 @@ async function call(params, body, tries = 3) {
     } catch (err) {
       lastError = err;
       if (err.final) break;
-      // many players finishing at once can hit Google's concurrency limit: back off and retry
       await wait(600 * (i + 1) + Math.random() * 600);
     }
   }

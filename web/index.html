@@ -9,11 +9,11 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Unbounded:wght@600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css?v=dev">
-  <!-- "?v=dev" is replaced by the commit id on deploy, so browsers never mix old and new files -->
   <script type="importmap">
     { "imports": {
         "./js/physics.js": "./js/physics.js?v=dev",
         "./js/map.js": "./js/map.js?v=dev",
+        "./js/crests.js": "./js/crests.js?v=dev",
         "./js/surf.js": "./js/surf.js?v=dev",
         "./js/leaderboard.js": "./js/leaderboard.js?v=dev" } }
   </script>
@@ -21,12 +21,10 @@
 </head>
 <body>
   <script>
-    // If the game fails to start (a file did not load, or old cached files), say so on the
-    // start screen instead of leaving a page that silently does nothing.
     window.nazareFail = function (e) {
       if (window.nazareStarted) return;
       var t = e && e.target;
-      if (t && t.tagName && t.tagName !== "SCRIPT") return;     // a font or image is not fatal
+      if (t && t.tagName && t.tagName !== "SCRIPT") return;
       var el = document.getElementById("load-error");
       if (el) el.hidden = false;
     };
@@ -34,8 +32,6 @@
     window.addEventListener("unhandledrejection", window.nazareFail);
   </script>
   <canvas id="sea"></canvas>
-
-  <!-- Home -->
   <section id="home" class="screen active">
     <div class="home-card">
       <p class="eyebrow">Praia do Norte, Portugal</p>
@@ -47,18 +43,9 @@
         <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>R</kbd>.</p>
     </div>
   </section>
-
-  <!-- Swell picker -->
   <section id="swell" class="screen">
     <div class="map-wrap">
       <canvas id="map"></canvas>
-      <div class="legend glass">
-        <div class="legend-row"><span class="swatch depth"></span><span>Shallow to deep water</span></div>
-        <div class="legend-row"><span class="swatch steep"></span><span>Steep drop-off</span></div>
-        <div class="legend-row"><span class="swatch arrow"></span><span class="pick-only">Swell direction: drag the arrow</span><span class="after">Swell direction</span></div>
-        <div class="legend-row"><span class="swatch crest"></span><span>Wave crests</span></div>
-        <div class="legend-row after"><span class="swatch height"></span><span>Wave size on the beach</span></div>
-      </div>
       <button class="btn ghost back" data-go="home" aria-label="Back">
         <svg viewBox="0 0 24 24" width="18" height="18"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
@@ -66,7 +53,7 @@
     <aside class="panel glass">
       <div class="pick" id="pick">
         <h2>Pick a swell</h2>
-        <p class="hint-line">Find the swell that makes the biggest wave. Turn the arrow on the map or use the sliders, then lock in to see your wave.</p>
+        <p class="hint-line">Find the swell that makes the biggest wave.</p>
         <label class="slider"><span>Wave period<b id="v-period"></b></span>
           <input type="range" id="period" min="6" max="22" step="1"></label>
         <label class="slider"><span>Coming from<b id="v-dir"></b></span>
@@ -77,25 +64,20 @@
       </div>
 
       <div class="reveal" id="reveal" hidden>
-        <div>
-          <p class="eyebrow">Your swell</p>
-          <p class="picked" id="picked"></p>
-      </div>
+        <p class="picked" id="picked"></p>
         <div class="result">
           <p class="label">Biggest wave you will surf</p>
           <p class="big-number"><span id="r-height">--</span><small>m</small></p>
           <div class="bars">
             <div class="bar-row"><span>With the canyon</span><div class="bar"><i id="b-canyon"></i></div><b id="r-canyon"></b></div>
-            <div class="bar-row muted"><span>Canyon filled in</span><div class="bar"><i id="b-plain"></i></div><b id="r-plain"></b></div>
+            <div class="bar-row muted"><span>Without the canyon</span><div class="bar"><i id="b-plain"></i></div><b id="r-plain"></b></div>
           </div>
           <p class="explain" id="r-explain"></p>
-      </div>
+        </div>
         <button class="btn primary wide" id="surf-it">Surf it</button>
       </div>
     </aside>
   </section>
-
-  <!-- Surfing HUD -->
   <section id="surf" class="screen passthrough">
     <div class="hud">
       <div class="pill glass"><b id="h-wave">Wave 1/3</b><span id="h-info"></span></div>
@@ -118,10 +100,9 @@
     </button>
   </section>
 
-  <!-- Projector leaderboard (open the game link with ?board) -->
   <section id="board" class="screen">
     <div class="board-main">
-      <p class="eyebrow">Class leaderboard</p>
+      <p class="eyebrow">Leaderboard</p>
       <h2 class="board-title">NAZAR&Eacute;</h2>
       <p class="board-meta" id="bd-meta">Loading scores...</p>
       <ol class="board-list" id="bd-list"></ol>
@@ -132,8 +113,6 @@
       <b id="bd-url"></b>
     </aside>
   </section>
-
-  <!-- Overlays -->
   <div id="tutorial" class="overlay">
     <div class="card glass">
       <h3>How to surf</h3>
@@ -169,7 +148,7 @@
       <div class="lb" id="f-lb" hidden>
         <form class="lb-form" id="lb-form">
           <input id="lb-name" type="text" maxlength="16" placeholder="Your name" autocomplete="nickname"
-                 enterkeyhint="send" aria-label="Your name for the class leaderboard">
+                 enterkeyhint="send" aria-label="Your name for the leaderboard">
           <button class="btn primary" id="lb-send" type="submit">Post score</button>
         </form>
         <p class="lb-status" id="lb-status"></p>

@@ -1,15 +1,11 @@
-// Surf the wave the swell produced: tow-in, ride the face, barrels and airs.
-//
-// The wave is seen from the beach. x runs along the crest (metres, the breaking curl
-// chases you from the left), u is height up the face (0 = trough, H = lip). Height,
-// speed and shape (plunging or spilling) come from the physics.
+// The surfing part. x runs along the crest (m), u is height up the face (0 = trough, H = lip).
 
 const RIDE_TIME = 25;
 const TOW_TIME = 2.6;
 const TURN_RATE = 150;          // deg/s carving
 const MAX_HEADING = 70;
-const FACE_GRAVITY = 6;         // g sin(face angle) on a ~38 deg face, m/s^2
-const AIR_KICK = 0.6;           // share of up-face speed that becomes take-off speed
+const FACE_GRAVITY = 6;         // m/s^2
+const AIR_KICK = 0.6;
 const AIR_GRAVITY = 0.85 * 9.81;
 const SPIN_RATE = 420;
 const POCKET_RATE = 40;         // points per second close to the curl
@@ -74,7 +70,7 @@ export class SurfGame {
     this.c = wave.speed;
     this.plunging = wave.breaker !== "spilling";
     this.ppm = clamp(430 / this.H, 14, 46);
-    this.vp = 0.6 * this.c;                    // speed the curl peels along the crest
+    this.vp = 0.6 * this.c;                    // peel speed
     this.s0 = 0.92 * this.vp;
     this.smin = 0.3 * this.vp;
     this.smax = 1.5 * this.vp;
@@ -116,8 +112,6 @@ export class SurfGame {
       scale: 0.7 + 0.15 * (i % 3) }));
   }
 
-  // ------------------------------------------------------------ geometry
-
   get trough() { return this.view.h - 110; }
   get lipY() { return this.trough - this.H * this.ppm; }
   sx(x) { return (x - this.cam) * this.ppm; }
@@ -142,8 +136,6 @@ export class SurfGame {
     this.popup(`${name} +${pts}`, "#ffc857");
   }
 
-  // ------------------------------------------------------------ input
-
   release() {
     if (this.state !== "tow") return;
     this.state = "ride";
@@ -151,8 +143,6 @@ export class SurfGame {
     this.a = -15;
     this.popup("Go!", "#4fe3d0");
   }
-
-  // ------------------------------------------------------------ update
 
   update(dt, keys) {
     if (this.demo) keys = this.autopilot();
@@ -210,7 +200,6 @@ export class SurfGame {
     const steer = (k.up ? 1 : 0) - (k.down ? 1 : 0);
     this.a = clamp(this.a + steer * TURN_RATE * dt, -MAX_HEADING, MAX_HEADING);
     const ar = rad(this.a);
-    // far ahead of the curl the wave is not steep yet: less push, pumping stops working
     const gap = this.x - this.xc - (this.plunging ? this.lc : 0);
     const power = clamp(1 - (gap - 2 * this.H) / (3 * this.H), 0.35, 1);
     if (k.right && power > 0.5) this.s += PUMP * dt;
@@ -227,13 +216,13 @@ export class SurfGame {
 
     if (this.u <= 0) {
       this.u = 0;
-      this.s -= 2.5 * dt;                   // off the face, in the flats, no push
+      this.s -= 2.5 * dt;
       if (this.a < 0) this.a = Math.min(0, this.a + 120 * dt);
     }
 
     if (this.lipZone && this.u >= 0.85 * this.H && !this.demo) {
       if (this.x < this.xc + 0.35 * this.lc) return this.wipe("The lip landed on you");
-      this.u = 0.85 * this.H;               // the throwing lip shoves you back down
+      this.u = 0.85 * this.H;
       this.a = -30;
       this.s *= 0.85;
       this.popup("Lip!", "#ff6b6b");
@@ -252,7 +241,6 @@ export class SurfGame {
       this.a = -Math.abs(this.a) * 0.5 - 12;
     }
 
-    // turns
     if (this.u > 0.8 * this.H && this.a > 15) this.armedTop = true;
     if (this.armedTop && this.a < -15) {
       this.armedTop = false;
@@ -264,7 +252,6 @@ export class SurfGame {
       if (this.u < 0.45 * this.H) this.award("Bottom turn", 40 + 30 * this.s / this.vp);
     }
 
-    // barrel
     const inTube = this.lipZone && this.u < 0.85 * this.H;
     if (inTube) {
       this.tubeT += dt;
@@ -322,8 +309,6 @@ export class SurfGame {
     };
   }
 
-  // ------------------------------------------------------------ particles
-
   updateParticles(dt) {
     const span = this.view.w / this.ppm;
     while (this.streaks.length < 40) {
@@ -372,8 +357,6 @@ export class SurfGame {
     this.popups = this.popups.filter((p) => p.life > 0);
     for (const c of this.clouds) c.x += c.speed * dt;
   }
-
-  // ------------------------------------------------------------ drawing
 
   draw(ctx, w, h) {
     this.view = { w, h };
@@ -436,14 +419,12 @@ export class SurfGame {
     ctx.bezierCurveTo(bx - 40, by - 52, bx + 10, by - 30, bx + 50, by);
     ctx.closePath();
     ctx.fill();
-    // fort and lighthouse on the cliff edge
     ctx.fillStyle = "#e9e0cf";
     ctx.fillRect(bx - 128, by - 82, 34, 12);
     ctx.fillStyle = "#e0484a";
     ctx.fillRect(bx - 110, by - 98, 8, 16);
     ctx.fillStyle = "#fff1c8";
     ctx.fillRect(bx - 109, by - 102, 6, 4);
-    // haze where the land meets the sea
     const hz = ctx.createLinearGradient(0, by - 90, 0, by);
     hz.addColorStop(0, "rgba(255,208,160,0)");
     hz.addColorStop(1, "rgba(255,208,160,0.35)");
@@ -462,14 +443,12 @@ export class SurfGame {
     g.addColorStop(1, "#06304b");
     ctx.fillStyle = g;
     ctx.fillRect(0, top, w, bottom - top);
-    // sun glitter on the face
     const sx = w * 0.76;
     const gl = ctx.createRadialGradient(sx, top + 30, 0, sx, top + 30, (bottom - top) * 0.9);
     gl.addColorStop(0, "rgba(255,236,200,0.35)");
     gl.addColorStop(1, "rgba(255,236,200,0)");
     ctx.fillStyle = gl;
     ctx.fillRect(0, top, w, bottom - top);
-    // texture lines being pulled up the face
     ctx.lineCap = "round";
     for (const [x, u, len] of this.streaks) {
       if (u > this.H * 0.97) continue;
@@ -499,7 +478,6 @@ export class SurfGame {
         const f = i / 20;
         edge.push([x0 + lc * f, this.sy(H * f ** 1.3)]);
       }
-      // dark inside of the barrel
       const sh = ctx.createLinearGradient(x0, 0, x0 + lc, 0);
       sh.addColorStop(0, "rgba(2,24,40,0.65)");
       sh.addColorStop(1, "rgba(2,24,40,0.0)");
@@ -511,7 +489,6 @@ export class SurfGame {
       ctx.lineTo(x0 + lc * 0.75, bottom);
       ctx.closePath();
       ctx.fill();
-      // the falling curtain of the lip
       const cg = ctx.createLinearGradient(x0, top, x0 + lc, bottom);
       cg.addColorStop(0, "rgba(214,250,246,0.75)");
       cg.addColorStop(1, "rgba(120,220,215,0.25)");
@@ -544,7 +521,6 @@ export class SurfGame {
       ctx.fill();
     }
 
-    // the broken part: a pile of white water behind the curl
     if (x0 > -20) {
       const pg = ctx.createLinearGradient(0, this.sy(H), 0, bottom);
       pg.addColorStop(0, "#ffffff");

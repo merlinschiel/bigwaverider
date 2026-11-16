@@ -5,13 +5,9 @@ import * as lb from "./leaderboard.js";
 
 const $ = (id) => document.getElementById(id);
 
-// the real depth grid drives both the map and the wave physics
 await loadBathymetry();
 
-// The picker starts with all sliders in the middle: finding the swell that makes the
-// biggest wave is the player's job
-const START_SWELL = { period: 14, dir: 290, size: 5 };
-// swell behind the wave on the home screen (not shown to the player as a choice)
+const START_SWELL = { period: 6, dir: 240, size: 1 };
 const DEMO_SWELL = { period: 18, dir: 300, size: 7 };
 // Offshore height of each wave in a session as a multiple of Hs; the last is the set wave
 const SET_SEQUENCE = [1.0, 1.4, 1.8];
@@ -29,9 +25,9 @@ const state = {
   screen: "home",
   overlay: null,
   swell: { ...START_SWELL },
-  fc: null,          // forecast of the locked-in swell, null while picking
+  fc: null,
   locked: false,
-  demoFc: null,      // forecast for the home screen wave
+  demoFc: null,
   game: null,
   session: null,
   paused: false,
@@ -39,8 +35,6 @@ const state = {
   keys: { up: false, down: false, left: false, right: false },
   best: store.get("nazare-best", 0),
 };
-
-// ---------------------------------------------------------------- canvas
 
 const sea = $("sea");
 const ctx = sea.getContext("2d");
@@ -59,11 +53,8 @@ function resize() {
 window.addEventListener("resize", resize);
 resize();
 
-// a placeholder wave for the home screen until the first forecast is ready
-const DEMO_WAVE = { height: 16, speed: 19, breaker: "plunging", depth: 20, iribarren: 0.6 };
+const DEMO_WAVE = { height: 16, speed: 19, breaker: "plunging", depth: 20 };
 state.game = new SurfGame(DEMO_WAVE, { demo: true });
-
-// --------------------------------------------------------------- screens
 
 function show(screen) {
   state.screen = screen;
@@ -85,8 +76,6 @@ function overlay(id) {
 for (const b of document.querySelectorAll("[data-go]")) {
   b.addEventListener("click", () => show(b.dataset.go));
 }
-
-// ---------------------------------------------------------- swell picker
 
 const map = new SwellMap($("map"));
 map.swell = state.swell;
@@ -119,8 +108,6 @@ for (const [key, el] of Object.entries(sliders)) {
   });
 }
 
-// Two steps: pick the swell blind, then lock it in to see the waves it makes. Once
-// locked, the swell stays until the session is over and the player picks a new one.
 function enterSwell() {
   syncSliders();
   setSwellMode(state.locked);
@@ -137,19 +124,12 @@ function setSwellMode(revealed) {
 }
 
 function lockIn() {
-  if (state.locked || $("lock-in").disabled) return;
+  if (state.locked) return;
   const s = state.swell;
-  // the forecast traces rays over two sea floors and takes a moment: show that first
-  $("lock-in").disabled = true;
-  $("lock-in").textContent = "Reading the sea floor...";
-  setTimeout(() => {
-    state.fc = forecast(s.period, s.dir, s.size);
-    state.locked = true;
-    $("lock-in").disabled = false;
-    $("lock-in").textContent = "Lock in swell";
-    setSwellMode(true);
-    fillReveal(true);
-  }, 40);
+  state.fc = forecast(s.period, s.dir, s.size);
+  state.locked = true;
+  setSwellMode(true);
+  fillReveal(true);
 }
 
 function unlock() {
@@ -176,11 +156,11 @@ function fillReveal(animate) {
     bars();
     $("r-height").textContent = big.height.toFixed(0);
   }
-  const gain = fc.canyonGain;
   let msg;
-  if (s.period < 11) msg = "Short swell hardly feels the sea floor, so the canyon does very little.";
-  else if (gain >= 1.25) msg = "The canyon bends the swell and focuses it onto the beach. Watch the crests cross.";
-  else msg = "From this direction the focused energy misses the beach.";
+  if (fc.reflected >= 0.5) msg = "The canyon edge turns the swell back onto the peak, and the heights add up.";
+  else if (fc.incidence > 60) msg = "From this direction the swell runs along the canyon edge and hardly hits it.";
+  else if (s.period < 12) msg = "Short swell slips across the canyon edge, so little is turned back.";
+  else msg = "From this direction the swell hits the canyon edge too head-on and crosses it.";
   if (big.breaker === "plunging") msg += " Long swell breaks steep and hollow: look for the barrel.";
   $("r-explain").textContent = msg;
   const tooSmall = big.height < 1;
@@ -200,8 +180,6 @@ function countUp(el, target, ms) {
 
 $("lock-in").addEventListener("click", lockIn);
 $("surf-it").addEventListener("click", surfIt);
-
-// --------------------------------------------------------------- session
 
 function surfIt() {
   if (!state.fc) return;
@@ -303,8 +281,6 @@ function showFinal() {
   showLeaderboard(total);
 }
 
-// ----------------------------------------------------------- leaderboard
-
 const touchOnly = matchMedia("(pointer: coarse)").matches;
 const nameInput = $("lb-name");
 nameInput.value = store.get("nazare-name", "");
@@ -317,7 +293,7 @@ function showLeaderboard(total) {
   if (sess.posted) return;
   $("lb-send").disabled = false;
   $("lb-send").textContent = "Post score";
-  setStatus(`Post ${total.toLocaleString()} points to the class board`);
+  setStatus(`Post ${total.toLocaleString()} points to the leaderboard`);
   $("lb-list").innerHTML = "";
   lb.fetchBoard({ limit: 5 })
     .then((d) => { if (state.session === sess && !sess.posted) renderList($("lb-list"), d.top); })
@@ -384,8 +360,6 @@ function renderList(list, top, you = null, rank = 0, best = 0, flash = null) {
   if (you && rank > top.length) row(rank, you, best, "you gap");
 }
 
-// ------------------------------------------------- projector board (?board)
-
 const params = new URLSearchParams(location.search);
 const boardMode = params.has("board");
 
@@ -432,8 +406,6 @@ function drawQr(url) {
 $("f-again").addEventListener("click", startSession);
 $("f-swell").addEventListener("click", () => { overlay(null); unlock(); show("swell"); });
 
-// ----------------------------------------------------------------- pause
-
 function pause(on) {
   if (state.screen !== "surf" || !state.game || state.game.state === "over") return;
   state.paused = on;
@@ -446,8 +418,6 @@ $("p-help").addEventListener("click", () => {
   overlay("tutorial");
 });
 $("p-quit").addEventListener("click", () => { state.paused = false; overlay(null); show("swell"); });
-
-// ----------------------------------------------------------------- input
 
 const KEYMAP = {
   ArrowUp: "up", KeyW: "up", ArrowDown: "down", KeyS: "down",
@@ -489,7 +459,6 @@ window.addEventListener("keyup", (e) => {
 });
 window.addEventListener("blur", () => { for (const k in state.keys) state.keys[k] = false; });
 
-// touch controls
 if (matchMedia("(pointer: coarse)").matches || "ontouchstart" in window) document.body.classList.add("touch-on");
 for (const b of document.querySelectorAll("#touch button")) {
   const key = b.dataset.key;
@@ -507,8 +476,6 @@ for (const b of document.querySelectorAll("#touch button")) {
 sea.addEventListener("pointerdown", () => {
   if (state.screen === "surf" && state.game?.state === "tow") state.game.release();
 });
-
-// ------------------------------------------------------------------ loop
 
 let last = performance.now();
 function frame(now) {
@@ -541,7 +508,6 @@ function updateHud(g) {
 requestAnimationFrame(frame);
 syncSliders();
 if (boardMode) startBoard();
-// compute the default forecast once the first frames are on screen
 setTimeout(() => {
   const p = DEMO_SWELL;
   state.demoFc = forecast(p.period, p.dir, p.size);

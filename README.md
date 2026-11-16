@@ -1,7 +1,7 @@
 # Nazaré: Canyon Surf
 
 A small browser surf game about why Nazaré (Portugal) gets the biggest surfed waves on
-Earth. Made for a coastal dynamics presentation. It is a plain static web page in `web/`
+Earth. It is a plain static web page in `web/`
 with no build step, published with GitHub Pages.
 
 ## How to play
@@ -20,7 +20,7 @@ with no build step, published with GitHub Pages.
 
 ## Leaderboard
 
-Scores go to a Google Sheet. Add `?board` to the game link for a live projector view
+Scores go to a Google Sheet. Add `?board` to the game link for a live big-screen view
 with a QR code to join. Setup: [leaderboard/README.md](leaderboard/README.md).
 
 ## Run it locally
@@ -33,14 +33,23 @@ Then open http://localhost:8000.
 
 ## How it works
 
-- Swell rays are traced over the real sea floor (refraction from the dispersion relation
-  w^2 = g k tanh(k h)), and wave heights along the coast follow from energy flux between
-  rays (shoaling and refraction), with depth-limited breaking at H = 0.78 h.
-- The "canyon filled in" comparison runs the same model with the canyon filled up to the
-  depth of the surrounding shelf.
+- One wave at one spot: the peak on the shelf just north of the canyon, off Praia do Norte
+  (after Hope et al. 2026).
+- Swell crossing the shelf meets the canyon's steep northern edge. If it hits the edge more
+  obliquely than the critical angle (Snell's law, sin a_c = c_shelf / c_canyon, from the
+  dispersion relation w^2 = g k tanh(k h) at 20 m and 150 m), it cannot cross and is turned
+  back. Long swell has a small critical angle, so it is turned back from a wide range of
+  directions; short swell mostly crosses.
+- Turned-back and incoming crests meet at the peak and their heights add:
+  H = (1 + R) Ks Hs, with R from 0 (nothing turned back) to 1, and Ks the shoaling factor.
+  The wave breaks at H = 0.78 h.
+- "Without the canyon" is the same wave with nothing turned back (R = 0): shoaling only.
 - Swell of 14 s and longer breaks as plunging waves (barrels), shorter swell spills.
-- It is a teaching model: linear wave theory, one period at a time, no diffraction,
-  currents or wind. The physics is in `web/js/physics.js`.
+- The map draws the crests over the real depths (lines of equal travel time), brighter
+  where the swell is focused, and light blue crests sent back by the canyon edge towards
+  the peak. It is a simple model: linear wave theory, one period and one direction at a
+  time, no diffraction, currents or wind. The physics is in `web/js/physics.js` and
+  `web/js/crests.js`.
 
 ## Data and sources
 

@@ -1,6 +1,6 @@
-# Class leaderboard (Google Sheet)
+# Leaderboard (Google Sheet)
 
-Players type a name at the end of their run and see the class top 5. A projector view
+Players type a name at the end of their run and see the top 5. A big-screen view
 shows the live board with a QR code to the game. Scores are stored in a Google Sheet you
 own, through the small script in `Code.gs`. Without this setup the game works as before,
 just without the leaderboard.
@@ -32,19 +32,18 @@ just without the leaderboard.
 To test it, open the URL from step 5 in a browser. You should see something like
 `{"ok":true,"day":"2026-11-04","players":0,"top":[]}`.
 
-## Using it in class
+## Using it
 
-- **Projector:** open the game link with `?board` added, for example
+- **Big screen:** open the game link with `?board` added, for example
   `https://YOUR-NAME.github.io/nazare/?board`. It refreshes every 5 seconds and
   briefly highlights new scores. Players can scan the QR code on it to open the game.
   `?board=all` shows the all-time board instead of today's.
 - **Players:** after the third wave they type a name and press **Post score**. The board
   keeps each name's best score, so playing again only counts if it beats the old one.
 - **Today only:** the board only counts scores from today (in the time zone set under
-  Apps Script **Project Settings**). Each class starts fresh, and old scores stay in the
+  Apps Script **Project Settings**). Each day starts fresh, and old scores stay in the
   sheet.
-- **Removing an entry:** delete its row in the "Scores" tab, including test runs from
-  before class. The board updates on its next refresh.
+- **Removing an entry:** delete its row in the "Scores" tab, including test runs. The board updates on its next refresh.
 
 ## Limits
 

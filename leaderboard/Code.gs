@@ -1,4 +1,4 @@
-// Nazare class leaderboard: Google Apps Script backend.
+// Nazare leaderboard: Google Apps Script backend.
 //
 // Paste this whole file into Extensions > Apps Script of a Google Sheet, then
 // Deploy > New deployment > Web app (Execute as: Me, Who has access: Anyone).

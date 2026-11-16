@@ -18,6 +18,9 @@ highscore.json
 #literature
 literature/
 
+#tools
+tools/
+
 # Old pygame version, not part of the web game
 main.py
 nazare/
